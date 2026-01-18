@@ -1,6 +1,6 @@
 repeat task.wait() until game:IsLoaded()
 
---loadstring(game:HttpGetAsync("https://raw.githubusercontent.com/danailgdimitrov/Luau/main/Miscellaneous/Hook%20Console%20Logging.luau"))()
+loadstring(game:HttpGetAsync("https://raw.githubusercontent.com/danailgdimitrov/Luau/main/Miscellaneous/Hook%20Console%20Logging.luau"))()
 
 rconsoleprint("Game loaded\n")
 
@@ -133,7 +133,6 @@ end
 
 -- Main logic
 local hasMVPs = CheckForMVPs()
-rconsoleprint(`Has MVPs: {hasMVPs}\n`)
 
 if hasMVPs then
 	rconsoleprint("Has MVPs! Staying in server.\n")
@@ -146,7 +145,7 @@ else
 
 		if teleportState == Enum.TeleportState.InProgress then
 			rconsoleprint("Teleport is in progress, queueing script.\n")
-			queue_on_teleport(game:HttpGetAsync("https://raw.githubusercontent.com/danailgdimitrov/Luau/main/Uma%20Racing/Server%20Hop.luau"))
+			queue_on_teleport(`loadstring(game:HttpGetAsync("https://raw.githubusercontent.com/danailgdimitrov/Luau/main/Uma%20Racing/Server%20Hop.luau"))()`)
 
 		elseif teleportState == Enum.TeleportState.Failed then
 			rconsolewarn("Teleport failed! Retrying with a different server...\n")
