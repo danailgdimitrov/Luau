@@ -34,7 +34,7 @@ local function CheckForMVPs(): boolean
 		if Player == LocalPlayer then continue end
 		if Player.leaderstats.MVP.Value < MVP_VALUE then continue end
 
-		rconsoleprint(`Found MVP: {Player.Name} (MVP: {Player.leaderstats.MVP.Value})\n`)
+		rconsoleprint(`Found MVP: {Player.Name} (MVPs: {Player.leaderstats.MVP.Value})\n`)
 		return true
 	end
     
@@ -102,23 +102,25 @@ local function GetVisitedServersList(): {string}
 	return list
 end
 
-local function TeleportToServer(serverJobId: string)
-	rconsoleprint(`Teleporting to server: {serverJobId}\n`)
+local function TeleportToServer(serverJobId: string?)
+	local teleportOptions = Instance.new("TeleportOptions")
 
-	-- Mark this server as visited before teleporting
-	visited_servers[serverJobId] = true
-
-	TeleportService:TeleportToPlaceInstance(game.PlaceId, serverJobId, LocalPlayer, {
+	-- Set teleport data with visited servers list
+	teleportOptions:SetTeleportData({
 		VisitedServers = GetVisitedServersList()
 	})
-end
 
-local function TeleportRandom()
-	rconsolewarn("No suitable servers found, trying random teleport.\n")
+	if serverJobId then
+		rconsoleprint(`Teleporting to server: {serverJobId}\n`)
 
-	TeleportService:Teleport(game.PlaceId, LocalPlayer, {
-		VisitedServers = GetVisitedServersList()
-	})
+		-- Mark this server as visited before teleporting
+		visited_servers[serverJobId] = true
+		teleportOptions.ServerInstanceId = serverJobId
+	else
+		rconsolewarn("No suitable servers found, trying random teleport.\n")
+	end
+
+	TeleportService:TeleportAsync(game.PlaceId, {LocalPlayer}, teleportOptions)
 end
 
 -- Main logic
@@ -143,19 +145,11 @@ else
 			task.wait(1)
 
 			local serverJobId = FindServer()
-			if serverJobId then
-				TeleportToServer(serverJobId)
-			else
-				TeleportRandom()
-			end
+			TeleportToServer(serverJobId)
 		end
 	end)
 
 	-- Find and teleport to a suitable server
 	local serverJobId = FindServer()
-	if serverJobId then
-		TeleportToServer(serverJobId)
-	else
-		TeleportRandom()
-	end
+	TeleportToServer(serverJobId)
 end
