@@ -1,6 +1,6 @@
 repeat task.wait() until game:IsLoaded()
 
-loadstring(game:HttpGetAsync("https://raw.githubusercontent.com/danailgdimitrov/Luau/main/Miscellaneous/Hook%20Console%20Logging.luau"))()
+--loadstring(game:HttpGetAsync("https://raw.githubusercontent.com/danailgdimitrov/Luau/main/Miscellaneous/Hook%20Console%20Logging.luau"))()
 
 rconsoleprint("Game loaded\n")
 
@@ -17,6 +17,16 @@ local LocalPlayer = Players.LocalPlayer
 -- Parse visited servers from teleport data (passed from previous hop)
 local visited_servers = {}
 local teleport_data = LocalPlayer:GetJoinData().TeleportData
+
+-- Debug: print what we received
+if teleport_data then
+	rconsoleprint(`Received teleport data: {typeof(teleport_data)}\n`)
+	for key, value in pairs(teleport_data) do
+		rconsoleprint(`  [{key}] = {typeof(value)}\n`)
+	end
+else
+	rconsoleprint("No teleport data received\n")
+end
 
 if teleport_data and teleport_data.VisitedServers then
 	for _, serverJobId in teleport_data.VisitedServers do
