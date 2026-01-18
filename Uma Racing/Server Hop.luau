@@ -103,24 +103,22 @@ local function GetVisitedServersList(): {string}
 end
 
 local function TeleportToServer(serverJobId: string?)
-	local teleportOptions = Instance.new("TeleportOptions")
-
-	-- Set teleport data with visited servers list
-	teleportOptions:SetTeleportData({
+	local teleportData = {
 		VisitedServers = GetVisitedServersList()
-	})
+	}
 
 	if serverJobId then
 		rconsoleprint(`Teleporting to server: {serverJobId}\n`)
 
 		-- Mark this server as visited before teleporting
 		visited_servers[serverJobId] = true
-		teleportOptions.ServerInstanceId = serverJobId
+
+		TeleportService:TeleportToPlaceInstance(game.PlaceId, serverJobId, LocalPlayer, nil, teleportData)
 	else
 		rconsolewarn("No suitable servers found, trying random teleport.\n")
-	end
 
-	TeleportService:TeleportAsync(game.PlaceId, {LocalPlayer}, teleportOptions)
+		TeleportService:Teleport(game.PlaceId, LocalPlayer, teleportData)
+	end
 end
 
 -- Main logic
