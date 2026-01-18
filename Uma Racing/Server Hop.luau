@@ -16,7 +16,7 @@ local LocalPlayer = Players.LocalPlayer
 
 -- Parse visited servers from teleport data (passed from previous hop)
 local visited_servers = {}
-local teleport_data = TeleportService:GetLocalPlayerJoinData()
+local teleport_data = TeleportService:GetLocalPlayerTeleportData()
 
 -- Debug: print what we received
 if teleport_data then
