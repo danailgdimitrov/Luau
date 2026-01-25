@@ -1,19 +1,19 @@
-# OS Metadata (Mac)
-.DS_Store
+# Local Workspace
+Archive/
+Drafts/
 
-# OS Metadata (Windows)
+# OS metadata (Windows & Mac)
+.DS_Store
 Thumbs.db
 Desktop.ini
 
-# Editor / IDE settings & Temp files
+# Editor metadata
+.agent/
+.gemini/
 .vscode/
 *.swp
 *~
+
+# Roblox place files
 *.rbxl
 *.rbxlx
-
-# Internals
-.agent/
-.gemini/
-Cache/
-WIP/
