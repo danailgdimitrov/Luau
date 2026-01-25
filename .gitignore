@@ -1,5 +1,16 @@
-# OS Metadata
+# OS Metadata (Mac)
 .DS_Store
+
+# OS Metadata (Windows)
+Thumbs.db
+Desktop.ini
+
+# Editor / IDE settings & Temp files
+.vscode/
+*.swp
+*~
+*.rbxl
+*.rbxlx
 
 # Internals
 .agent/
