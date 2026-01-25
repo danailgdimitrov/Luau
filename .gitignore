@@ -1,0 +1,9 @@
+# System
+.DS_Store
+
+# Agent/AI internals
+.agent/
+.gemini/
+
+# Project specific
+Cache/
