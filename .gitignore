@@ -1,9 +1,8 @@
-# System
+# OS Metadata
 .DS_Store
 
-# Agent/AI internals
+# Internals
 .agent/
 .gemini/
-
-# Project specific
 Cache/
+WIP/
