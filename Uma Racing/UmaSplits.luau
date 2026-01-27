@@ -464,26 +464,30 @@ ModeButton.MouseButton1Click:Connect(CycleMode)
 -- Dragging Logic
 --------------------------------------------------------------------------------
 
-local function MakeDraggable(frame, saveKey)
+local function MakeDraggable(handleFrame, saveKey, targetFrame)
+	-- handleFrame: what you click to drag
+	-- targetFrame: what actually moves (defaults to handleFrame)
+	targetFrame = targetFrame or handleFrame
+	
 	local dragging = false
 	local dragStart = nil
 	local startPos = nil
 	
-	frame.InputBegan:Connect(function(input)
+	handleFrame.InputBegan:Connect(function(input)
 		if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
 			dragging = true
 			dragStart = input.Position
-			startPos = frame.Position
+			startPos = targetFrame.Position
 		end
 	end)
 	
-	frame.InputEnded:Connect(function(input)
+	handleFrame.InputEnded:Connect(function(input)
 		if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
 			dragging = false
 			-- Save position
 			local screenSize = ScreenGui.AbsoluteSize
-			settings[saveKey .. "X"] = frame.Position.X.Scale + (frame.Position.X.Offset / screenSize.X)
-			settings[saveKey .. "Y"] = frame.Position.Y.Scale + (frame.Position.Y.Offset / screenSize.Y)
+			settings[saveKey .. "X"] = targetFrame.Position.X.Scale + (targetFrame.Position.X.Offset / screenSize.X)
+			settings[saveKey .. "Y"] = targetFrame.Position.Y.Scale + (targetFrame.Position.Y.Offset / screenSize.Y)
 			SaveSettings()
 		end
 	end)
@@ -491,7 +495,7 @@ local function MakeDraggable(frame, saveKey)
 	Services.UserInputService.InputChanged:Connect(function(input)
 		if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
 			local delta = input.Position - dragStart
-			frame.Position = UDim2.new(
+			targetFrame.Position = UDim2.new(
 				startPos.X.Scale, startPos.X.Offset + delta.X,
 				startPos.Y.Scale, startPos.Y.Offset + delta.Y
 			)
@@ -500,13 +504,14 @@ local function MakeDraggable(frame, saveKey)
 end
 
 MakeDraggable(SplitPopup, "popupPos")
-MakeDraggable(TrackerTitle, "trackerPos")
+MakeDraggable(TrackerTitle, "trackerPos", TrackerPanel)  -- Drag title bar to move panel
 
 --------------------------------------------------------------------------------
 -- Popup Animation
 --------------------------------------------------------------------------------
 
 local popupTween = nil
+local popupFadeToken = 0  -- Token to prevent stale fade callbacks
 
 local function ShowSplitPopup(checkpointIndex, time, delta, deltaColor)
 	-- Update content
@@ -516,19 +521,30 @@ local function ShowSplitPopup(checkpointIndex, time, delta, deltaColor)
 	PopupDelta.TextColor3 = deltaColor or Theme.Colors.Neutral
 	
 	-- Cancel existing tween
-	if popupTween then popupTween:Cancel() end
+	if popupTween then 
+		popupTween:Cancel() 
+		popupTween = nil
+	end
 	
-	-- Show popup
+	-- Increment token to invalidate any pending fade callbacks
+	popupFadeToken = popupFadeToken + 1
+	local myToken = popupFadeToken
+	
+	-- Show popup immediately
 	SplitPopup.Visible = true
 	SplitPopup.GroupTransparency = 0
 	
-	-- Wait then fade out
-	task.delay(2, function()
+	-- Wait then fade out (only if token still matches)
+	task.delay(2.5, function()
+		if popupFadeToken ~= myToken then return end  -- Another popup was shown, skip fade
+		
 		local tweenInfo = TweenInfo.new(0.5, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
 		popupTween = Services.TweenService:Create(SplitPopup, tweenInfo, {GroupTransparency = 1})
 		popupTween:Play()
-		popupTween.Completed:Connect(function()
-			SplitPopup.Visible = false
+		popupTween.Completed:Once(function()
+			if popupFadeToken == myToken then
+				SplitPopup.Visible = false
+			end
 		end)
 	end)
 end
@@ -667,6 +683,15 @@ local function OnRaceStart()
 	-- Update current uma
 	currentUma = DetectUma()
 	
+	-- Re-detect weather in case it changed
+	currentWeather = DetectWeather()
+	
+	-- Update tracker title with current weather
+	if currentMapName then
+		local weatherIcon = currentWeather == "Snow" and "❄️" or (currentWeather == "Rain" and "🌧️" or "☀️")
+		TrackerTitleLabel.Text = "🏁 " .. currentMapName .. " " .. weatherIcon
+	end
+	
 	-- Clear tracker content
 	for _, child in ipairs(TrackerContent:GetChildren()) do
 		if child:IsA("Frame") then
@@ -681,8 +706,10 @@ local function OnRaceStart()
 	-- Show tracker
 	TrackerPanel.Visible = true
 	
-	-- Preload history for this map/weather
-	SplitTracker.LoadHistory(currentMapName, currentWeather)
+	-- Preload history for this map/weather (only if both are valid)
+	if currentMapName and currentWeather then
+		SplitTracker.LoadHistory(currentMapName, currentWeather)
+	end
 end
 
 local function OnRaceEnd()
@@ -690,8 +717,8 @@ local function OnRaceEnd()
 	
 	local totalTime = Clock() - raceStartTime
 	
-	-- Only save if we have splits
-	if #currentSplits > 0 then
+	-- Only save if we have valid data
+	if #currentSplits > 0 and currentMapName and currentWeather then
 		local record = {
 			player = LocalPlayer.Name,
 			uma = currentUma,
@@ -699,7 +726,8 @@ local function OnRaceEnd()
 			splits = currentSplits,
 		}
 		
-		SplitTracker.AppendRecord(currentMapName, currentWeather, record)
+		local success = SplitTracker.AppendRecord(currentMapName, currentWeather, record)
+		print("[UmaSplits] Saved record:", success and "OK" or "FAILED", currentMapName, currentWeather, totalTime)
 	end
 	
 	isRaceActive = false

@@ -15,7 +15,7 @@
 	SplitTracker.Initialize({
 		BaseFolder = "MyGame_Data",
 		TrackPlayer = true,        -- Include player name in records
-		EntityKey = "uma",         -- Field name for entity/class (nil to omit)
+		EntityKey = "uma",         -- Field name for entity/class (nil to omit, if there are no variants of entities)
 	})
 	
 	-- Load history for a map/condition
@@ -183,6 +183,12 @@ function SplitTracker.Initialize(userConfig)
 end
 
 function SplitTracker.LoadHistory(mapName, condition)
+	-- Guard against nil parameters
+	if not mapName or not condition then
+		warn("[SplitTracker] LoadHistory called with nil:", mapName, condition)
+		return {}
+	end
+	
 	-- Check cache first
 	_G.SplitCache[mapName] = _G.SplitCache[mapName] or {}
 	local mapCache = _G.SplitCache[mapName]
@@ -206,6 +212,7 @@ function SplitTracker.LoadHistory(mapName, condition)
 				TableInsert(history, record)
 			end
 		end
+		print("[SplitTracker] Loaded", #history, "records from", path)
 	end
 	
 	-- Store in cache
@@ -218,6 +225,12 @@ function SplitTracker.LoadHistory(mapName, condition)
 end
 
 function SplitTracker.AppendRecord(mapName, condition, record)
+	-- Guard against nil parameters
+	if not mapName or not condition then
+		warn("[SplitTracker] AppendRecord called with nil:", mapName, condition)
+		return false
+	end
+	
 	-- Add timestamp if not present
 	record.timestamp = record.timestamp or OsTime()
 	
@@ -236,7 +249,15 @@ function SplitTracker.AppendRecord(mapName, condition, record)
 	-- Append to file
 	local path = _GetFilePath(mapName, condition)
 	local jsonLine = Services.HttpService:JSONEncode(record) .. "\n"
-	return _AppendFile(path, jsonLine)
+	local success = _AppendFile(path, jsonLine)
+	
+	if success then
+		print("[SplitTracker] Saved to", path)
+	else
+		warn("[SplitTracker] Failed to save to", path)
+	end
+	
+	return success
 end
 
 function SplitTracker.GetStats(mapName, condition, entityFilter)
