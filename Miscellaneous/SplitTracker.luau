@@ -65,41 +65,82 @@ _G.SplitCache = _G.SplitCache or {}
 --------------------------------------------------------------------------------
 
 local function _EnsureFolder(path)
-	if makefolder and not isfolder(path) then
-		pcall(makefolder, path)
+	print("[SplitTracker] _EnsureFolder:", path)
+	print("[SplitTracker]   makefolder exists:", makefolder ~= nil)
+	print("[SplitTracker]   isfolder exists:", isfolder ~= nil)
+	
+	if makefolder then
+		local exists = isfolder and isfolder(path)
+		print("[SplitTracker]   folder exists:", exists)
+		if not exists then
+			local success, err = pcall(makefolder, path)
+			print("[SplitTracker]   makefolder result:", success, err)
+		end
 	end
 end
 
 local function _GetFilePath(mapName, condition)
+	print("[SplitTracker] _GetFilePath:", mapName, condition)
 	local mapFolder = Config.BaseFolder .. "/" .. mapName
 	_EnsureFolder(Config.BaseFolder)
 	_EnsureFolder(mapFolder)
-	return mapFolder .. "/" .. condition .. ".jsonl"
+	local path = mapFolder .. "/" .. condition .. ".jsonl"
+	print("[SplitTracker]   => path:", path)
+	return path
 end
 
 local function _ReadFile(path)
-	if not isfile or not isfile(path) then
+	print("[SplitTracker] _ReadFile:", path)
+	print("[SplitTracker]   isfile exists:", isfile ~= nil)
+	print("[SplitTracker]   readfile exists:", readfile ~= nil)
+	
+	if not isfile then
+		print("[SplitTracker]   isfile not available")
 		return nil
 	end
+	
+	local fileExists = isfile(path)
+	print("[SplitTracker]   file exists:", fileExists)
+	
+	if not fileExists then
+		return nil
+	end
+	
 	local success, content = pcall(readfile, path)
+	print("[SplitTracker]   read success:", success, "length:", content and #content or 0)
 	return success and content or nil
 end
 
 local function _WriteFile(path, content)
-	if not writefile then return false end
-	local success = pcall(writefile, path, content)
+	print("[SplitTracker] _WriteFile:", path, "content length:", #content)
+	print("[SplitTracker]   writefile exists:", writefile ~= nil)
+	
+	if not writefile then 
+		print("[SplitTracker]   writefile not available!")
+		return false 
+	end
+	
+	local success, err = pcall(writefile, path, content)
+	print("[SplitTracker]   write result:", success, err)
 	return success
 end
 
 local function _AppendFile(path, content)
+	print("[SplitTracker] _AppendFile:", path, "content length:", #content)
+	print("[SplitTracker]   appendfile exists:", appendfile ~= nil)
+	
 	if appendfile then
-		local success = pcall(appendfile, path, content)
+		local success, err = pcall(appendfile, path, content)
+		print("[SplitTracker]   appendfile result:", success, err)
 		return success
 	elseif writefile then
-		-- Fallback: read + append + write
+		print("[SplitTracker]   Using writefile fallback")
 		local existing = _ReadFile(path) or ""
+		print("[SplitTracker]   Existing content length:", #existing)
 		return _WriteFile(path, existing .. content)
 	end
+	
+	print("[SplitTracker]   No write function available!")
 	return false
 end
 
