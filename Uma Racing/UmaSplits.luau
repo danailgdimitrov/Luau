@@ -62,6 +62,7 @@ local cumulativePauseTime = 0
 
 -- For accurate total delta display
 local cumulativeRefTime = 0
+local totalDeltaSum = 0  -- Sum of all segment deltas
 
 -- Comparison mode: "PB_Global", "PB_Uma", "Median_Global", "Median_Uma", etc.
 local comparisonMode = "PB_Uma"
@@ -402,6 +403,36 @@ TotalDelta.Font = Theme.Fonts.Primary
 TotalDelta.TextXAlignment = Enum.TextXAlignment.Right
 TotalDelta.Parent = TrackerTotal
 
+-- Lap Time Row
+local LapTimeRow = Instance.new("Frame")
+LapTimeRow.Name = "LapTimeRow"
+LapTimeRow.Size = UDim2.new(1, -10, 0, 20)
+LapTimeRow.Position = UDim2.new(0, 5, 1, -52)
+LapTimeRow.BackgroundTransparency = 1
+LapTimeRow.Parent = TrackerPanel
+
+local LapTimeLabel = Instance.new("TextLabel")
+LapTimeLabel.Size = UDim2.new(0.4, 0, 1, 0)
+LapTimeLabel.BackgroundTransparency = 1
+LapTimeLabel.Text = "Time:"
+LapTimeLabel.TextColor3 = Theme.Colors.TextMuted
+LapTimeLabel.TextSize = 11
+LapTimeLabel.Font = Theme.Fonts.Secondary
+LapTimeLabel.TextXAlignment = Enum.TextXAlignment.Left
+LapTimeLabel.Parent = LapTimeRow
+
+local LapTimeValue = Instance.new("TextLabel")
+LapTimeValue.Name = "Value"
+LapTimeValue.Size = UDim2.new(0.6, 0, 1, 0)
+LapTimeValue.Position = UDim2.new(0.4, 0, 0, 0)
+LapTimeValue.BackgroundTransparency = 1
+LapTimeValue.Text = "---"
+LapTimeValue.TextColor3 = Theme.Colors.Text
+LapTimeValue.TextSize = 11
+LapTimeValue.Font = Theme.Fonts.Secondary
+LapTimeValue.TextXAlignment = Enum.TextXAlignment.Right
+LapTimeValue.Parent = LapTimeRow
+
 --------------------------------------------------------------------------------
 -- Mode Selector (Cycles through 8 modes on click)
 --------------------------------------------------------------------------------
@@ -661,17 +692,39 @@ local function SetupCheckpoints()
 					local referenceTime = GetReferenceTime(splitIndex)
 					local deltaString, deltaColor = SplitTracker.CalculateDeltaColor(cumulativeTime, referenceTime)
 					
+					-- Calculate segment delta for total sum
+					if referenceTime then
+						local segmentDelta = cumulativeTime - referenceTime
+						-- For first split, just use the delta directly
+						-- For subsequent splits, we need segment time comparison
+						if splitIndex == 1 then
+							totalDeltaSum = segmentDelta
+						else
+							-- Get previous cumulative reference
+							local prevRefTime = GetReferenceTime(splitIndex - 1)
+							local prevCumulativeTime = currentSplits[splitIndex - 1]
+							if prevRefTime then
+								-- Segment delta = (current segment time) - (reference segment time)
+								local currentSegment = cumulativeTime - prevCumulativeTime
+								local refSegment = referenceTime - prevRefTime
+								totalDeltaSum = totalDeltaSum + (currentSegment - refSegment)
+							end
+						end
+					end
+					
 					-- Show popup
 					ShowSplitPopup(splitIndex, cumulativeTime, deltaString, deltaColor)
 					
 					-- Add to tracker
 					CreateSplitRow(splitIndex, cumulativeTime, deltaString, deltaColor)
 					
-					-- Update total delta (referenceTime is already cumulative at this split)
-					local totalDelta = referenceTime and (cumulativeTime - referenceTime) or 0
-					local totalDeltaString = StringFormat("%s%.2fs", totalDelta >= 0 and "+" or "", totalDelta)
+					-- Update total delta (sum of segment deltas)
+					local totalDeltaString = StringFormat("%s%.2fs", totalDeltaSum >= 0 and "+" or "", totalDeltaSum)
 					TotalDelta.Text = totalDeltaString
-					TotalDelta.TextColor3 = totalDelta >= 0 and Theme.Colors.Danger or Theme.Colors.Success
+					TotalDelta.TextColor3 = totalDeltaSum >= 0 and Theme.Colors.Danger or Theme.Colors.Success
+					
+					-- Update lap time display
+					LapTimeValue.Text = StringFormat("%.2fs", cumulativeTime)
 				end)
 				
 				TableInsert(checkpointConnections, connection)
@@ -692,6 +745,7 @@ local function OnRaceStart()
 	cumulativePauseTime = 0
 	cutscenePauseStart = nil
 	cumulativeRefTime = 0
+	totalDeltaSum = 0
 	
 	-- Update current uma
 	currentUma = DetectUma()
