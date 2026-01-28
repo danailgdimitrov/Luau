@@ -60,6 +60,9 @@ local lastCheckpointIndex = 0
 local cutscenePauseStart = nil
 local cumulativePauseTime = 0
 
+-- For accurate total delta display
+local cumulativeRefTime = 0
+
 -- Comparison mode: "PB_Global", "PB_Uma", "Median_Global", "Median_Uma", etc.
 local comparisonMode = "PB_Uma"
 
@@ -222,7 +225,7 @@ local PopupCheckpoint = Instance.new("TextLabel")
 PopupCheckpoint.Name = "Checkpoint"
 PopupCheckpoint.Size = UDim2.new(0, 50, 0, 40)
 PopupCheckpoint.BackgroundTransparency = 1
-PopupCheckpoint.Text = "CP1"
+PopupCheckpoint.Text = "1"
 PopupCheckpoint.TextColor3 = Theme.Colors.Text
 PopupCheckpoint.TextSize = 18
 PopupCheckpoint.Font = Theme.Fonts.Primary
@@ -329,7 +332,7 @@ local function CreateSplitRow(index, time, delta, deltaColor)
 	local IndexLabel = Instance.new("TextLabel")
 	IndexLabel.Size = UDim2.new(0, 30, 1, 0)
 	IndexLabel.BackgroundTransparency = 1
-	IndexLabel.Text = "CP" .. index
+	IndexLabel.Text = tostring(index)
 	IndexLabel.TextColor3 = Theme.Colors.TextMuted
 	IndexLabel.TextSize = 11
 	IndexLabel.Font = Theme.Fonts.Secondary
@@ -520,7 +523,7 @@ local popupFadeToken = 0  -- Token to prevent stale fade callbacks
 
 local function ShowSplitPopup(checkpointIndex, time, delta, deltaColor)
 	-- Update content
-	PopupCheckpoint.Text = "CP" .. checkpointIndex
+	PopupCheckpoint.Text = tostring(checkpointIndex)
 	PopupTime.Text = StringFormat("%.2fs", time)
 	PopupDelta.Text = delta or "---"
 	PopupDelta.TextColor3 = deltaColor or Theme.Colors.Neutral
@@ -664,13 +667,11 @@ local function SetupCheckpoints()
 					-- Add to tracker
 					CreateSplitRow(splitIndex, cumulativeTime, deltaString, deltaColor)
 					
-					-- Update total delta
-					if referenceTime then
-						local totalDelta = cumulativeTime - referenceTime
-						local totalDeltaString = StringFormat("%s%.2fs", totalDelta >= 0 and "+" or "", totalDelta)
-						TotalDelta.Text = totalDeltaString
-						TotalDelta.TextColor3 = deltaColor
-					end
+					-- Update total delta (referenceTime is already cumulative at this split)
+					local totalDelta = referenceTime and (cumulativeTime - referenceTime) or 0
+					local totalDeltaString = StringFormat("%s%.2fs", totalDelta >= 0 and "+" or "", totalDelta)
+					TotalDelta.Text = totalDeltaString
+					TotalDelta.TextColor3 = totalDelta >= 0 and Theme.Colors.Danger or Theme.Colors.Success
 				end)
 				
 				TableInsert(checkpointConnections, connection)
@@ -690,6 +691,7 @@ local function OnRaceStart()
 	lastCheckpointIndex = 1  -- First checkpoint touched will be 2
 	cumulativePauseTime = 0
 	cutscenePauseStart = nil
+	cumulativeRefTime = 0
 	
 	-- Update current uma
 	currentUma = DetectUma()
