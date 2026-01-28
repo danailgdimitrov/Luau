@@ -56,6 +56,10 @@ local checkpointConnections = {}
 local isRaceActive = false
 local lastCheckpointIndex = 0
 
+-- Cutscene pause tracking
+local cutscenePauseStart = nil
+local cumulativePauseTime = 0
+
 -- Comparison mode: "PB_Global", "PB_Uma", "Median_Global", "Median_Uma", etc.
 local comparisonMode = "PB_Uma"
 
@@ -638,23 +642,27 @@ local function SetupCheckpoints()
 					-- Check race is active
 					if not isRaceActive or not raceStartTime then return end
 					
-					-- Check sequential (must hit checkpoints in order)
-					if index ~= lastCheckpointIndex + 1 then return end
+					-- Check sequential (must hit checkpoints in order, with 6→1 wrap)
+					local expectedIndex = lastCheckpointIndex + 1
+					if expectedIndex > 6 then expectedIndex = 1 end
+					if index ~= expectedIndex then return end
 					
-					-- Record split
-					local cumulativeTime = now - raceStartTime
-					currentSplits[index] = cumulativeTime
+					-- Record split (subtract cutscene pause time)
+					local rawTime = now - raceStartTime
+					local cumulativeTime = rawTime - cumulativePauseTime
+					TableInsert(currentSplits, cumulativeTime)
 					lastCheckpointIndex = index
 					
-					-- Get reference and calculate delta
-					local referenceTime = GetReferenceTime(index)
+					-- Get reference and calculate delta (use array index, not checkpoint index)
+					local splitIndex = #currentSplits
+					local referenceTime = GetReferenceTime(splitIndex)
 					local deltaString, deltaColor = SplitTracker.CalculateDeltaColor(cumulativeTime, referenceTime)
 					
 					-- Show popup
-					ShowSplitPopup(index, cumulativeTime, deltaString, deltaColor)
+					ShowSplitPopup(splitIndex, cumulativeTime, deltaString, deltaColor)
 					
 					-- Add to tracker
-					CreateSplitRow(index, cumulativeTime, deltaString, deltaColor)
+					CreateSplitRow(splitIndex, cumulativeTime, deltaString, deltaColor)
 					
 					-- Update total delta
 					if referenceTime then
@@ -679,7 +687,9 @@ local function OnRaceStart()
 	isRaceActive = true
 	raceStartTime = Clock()
 	currentSplits = {}
-	lastCheckpointIndex = 0
+	lastCheckpointIndex = 1  -- First checkpoint touched will be 2
+	cumulativePauseTime = 0
+	cutscenePauseStart = nil
 	
 	-- Update current uma
 	currentUma = DetectUma()
@@ -716,7 +726,8 @@ end
 local function OnRaceEnd()
 	if not isRaceActive or not raceStartTime then return end
 	
-	local totalTime = Clock() - raceStartTime
+	local rawTime = Clock() - raceStartTime
+	local totalTime = rawTime - cumulativePauseTime
 	
 	-- Only save if we have valid data
 	if #currentSplits > 0 and currentMapName and currentWeather then
@@ -771,37 +782,61 @@ end
 -- Event Listeners
 --------------------------------------------------------------------------------
 
--- Map load/unload detection
-workspace.ChildAdded:Connect(function(child)
-	if child.Name == "Map" then
-		task.wait(0.5)  -- Wait for map to fully load
+-- Map attribute detection
+Configuration:GetAttributeChangedSignal("Map"):Connect(function()
+	local mapValue = Configuration:GetAttribute("Map")
+	
+	if mapValue and mapValue ~= "" then
+		task.wait(0.3)
 		OnMapLoad()
-	end
-end)
-
-workspace.ChildRemoved:Connect(function(child)
-	if child.Name == "Map" then
+	else
 		OnMapUnload()
 	end
 end)
 
--- Race start/end detection
-local wasRaceActive = false
-
-Services.RunService.Heartbeat:Connect(function()
-	local nowRaceActive = IsRaceActive()
+-- Race start detection (GateStart attribute)
+Configuration:GetAttributeChangedSignal("GateStart"):Connect(function()
+	local gateStart = Configuration:GetAttribute("GateStart")
 	
-	if nowRaceActive and not wasRaceActive then
+	if gateStart == true then
 		OnRaceStart()
-	elseif not nowRaceActive and wasRaceActive then
-		OnRaceEnd()
 	end
-	
-	wasRaceActive = nowRaceActive
 end)
 
--- Initial check if map already exists
-if workspace:FindFirstChild("Map") then
+-- Race end detection (FinishedRace flag on character)
+local function WatchForFinishedRace(character)
+	if not character then return end
+	
+	character.ChildAdded:Connect(function(child)
+		if child.Name == "FinishedRace" and isRaceActive then
+			OnRaceEnd()
+		end
+	end)
+end
+
+if LocalPlayer.Character then
+	WatchForFinishedRace(LocalPlayer.Character)
+end
+LocalPlayer.CharacterAdded:Connect(WatchForFinishedRace)
+
+-- Cutscene pause detection
+Lighting.ChildAdded:Connect(function(child)
+	if child.Name == "CutsceneOn" and isRaceActive then
+		cutscenePauseStart = Clock()
+	end
+end)
+
+Lighting.ChildRemoved:Connect(function(child)
+	if child.Name == "CutsceneOn" and cutscenePauseStart then
+		local pauseDuration = Clock() - cutscenePauseStart
+		cumulativePauseTime = cumulativePauseTime + pauseDuration
+		cutscenePauseStart = nil
+	end
+end)
+
+-- Initial check if map already loaded
+local initialMap = Configuration:GetAttribute("Map")
+if initialMap and initialMap ~= "" then
 	OnMapLoad()
 end
 

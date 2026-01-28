@@ -45,6 +45,13 @@ local MathFloor = math.floor
 local StringFormat = string.format
 local OsTime = os.time
 
+-- Round to N decimal places (default 2)
+local function Round(n, decimals)
+	decimals = decimals or 2
+	local mult = 10 ^ decimals
+	return MathFloor(n * mult + 0.5) / mult
+end
+
 -- Load Services internally
 local Services = loadstring(game:HttpGetAsync("https://raw.githubusercontent.com/danailgdimitrov/Luau/refs/heads/main/Miscellaneous/Services.luau"))()
 
@@ -266,6 +273,16 @@ function SplitTracker.AppendRecord(mapName, condition, record)
 	
 	-- Add timestamp if not present
 	record.timestamp = record.timestamp or OsTime()
+	
+	-- Round times to 2 decimal places
+	if record.totalTime then
+		record.totalTime = Round(record.totalTime)
+	end
+	if record.splits then
+		for i, split in ipairs(record.splits) do
+			record.splits[i] = Round(split)
+		end
+	end
 	
 	-- Ensure history is loaded
 	local history = SplitTracker.LoadHistory(mapName, condition)
