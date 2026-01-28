@@ -107,25 +107,28 @@ local function _WriteFile(path, content)
 end
 
 local function _AppendFile(path, content)
-	-- If file doesn't exist, create it first
-	local fileExists = isfile and isfile(path)
-	
-	if not fileExists then
-		_Log("File doesn't exist, creating:", path)
-		-- Create empty file first
+	-- Ensure the file exists before appending (required by some environments)
+	if isfile and not isfile(path) then
+		_Log("File missing, creating initial file:", path)
 		if not _WriteFile(path, "") then
 			return false
 		end
+		
+		-- Small delay to let the OS/filesystem register the new file
+		task.wait(0.1)
 	end
 	
 	if appendfile then
 		local success, err = pcall(appendfile, path, content)
-		if not success then
-			_Log("appendfile failed:", path, err)
+		if success then
+			return true
 		end
-		return success
-	elseif writefile then
-		-- Fallback: read + append + write
+		
+		_Log("appendfile failed (falling back to writefile):", err)
+	end
+	
+	-- Fallback: read + append + write (more robust across different environments)
+	if writefile then
 		local existing = _ReadFile(path) or ""
 		return _WriteFile(path, existing .. content)
 	end
