@@ -64,6 +64,129 @@ local cumulativePauseTime = 0
 local cumulativeRefTime = 0
 local totalDeltaSum = 0  -- Sum of all segment deltas
 
+-- Extended telemetry tracking (LocalPlayer only)
+local localTelemetry = {}  -- Array of {time, stamina, staminaRaw, spurts, slips, usedZone, position}
+local slipCount = 0        -- LocalPlayer's slip count (SprintRegenUP additions)
+local slipConnection = nil -- Connection for tracking LocalPlayer's slips
+local hadZoneCutscene = false  -- Did the zone trigger a cutscene?
+local zoneCutsceneTracking = nil  -- Connection for cutscene during zone
+
+-- Version info (cached once)
+local placeVersion = game.PlaceVersion
+local releaseVersion = nil  -- Parsed from game title (just "1.1", not "UPD 1.1")
+
+-- Parse release version from game title (e.g., "[UPD 1.1] Uma Racing" -> "1.1")
+local function GetReleaseVersion()
+	if releaseVersion then return releaseVersion end
+	
+	local success, info = pcall(function()
+		return Services.MarketplaceService:GetProductInfo(game.PlaceId)
+	end)
+	
+	if success and info and info.Name then
+		-- Match "[UPD X.X]" and extract just the version number
+		local match = info.Name:match("%[UPD%s*([%d%.]+)%]")
+		releaseVersion = match or "Unknown"
+	else
+		releaseVersion = "Unknown"
+	end
+	
+	return releaseVersion
+end
+
+-- Get character for a player (workspace.Players or Player.Character)
+local function GetCharacter(player)
+	local playerFolder = workspace:FindFirstChild("Players")
+	if playerFolder then
+		local char = playerFolder:FindFirstChild(player.Name)
+		if char then return char end
+	end
+	return player.Character
+end
+
+-- Get uma name for any player/character
+local function GetUma(playerOrCharacter)
+	if not playerOrCharacter then return nil end
+	
+	-- If it's a character, find the player
+	local player = playerOrCharacter
+	if not playerOrCharacter:IsA("Player") then
+		player = Services.Players:GetPlayerFromCharacter(playerOrCharacter)
+		if not player then
+			player = Services.Players:FindFirstChild(playerOrCharacter.Name)
+		end
+	end
+	
+	if player then
+		local currentCharacter = player:FindFirstChild("CurrentCharacter")
+		if currentCharacter then
+			return tostring(currentCharacter.Value)
+		end
+	end
+	
+	return nil
+end
+
+-- Get stamina info: { percent = 85, current = 100, max = 150 }
+local function GetStaminaInfo(character)
+	if not character then return nil end
+	
+	local info = character:FindFirstChild("Info")
+	if not info then return nil end
+	
+	local staminaVal = info:FindFirstChild("Stamina")
+	local maxStaminaVal = info:FindFirstChild("MaxStamina")
+	
+	if not staminaVal then return nil end
+	
+	local current = staminaVal.Value
+	local max = maxStaminaVal and tonumber(maxStaminaVal.Value) or 100
+	local percent = max > 0 and (current / max * 100) or 0
+	
+	return {
+		percent = MathFloor(percent + 0.5),
+		current = MathFloor(current + 0.5),
+		max = MathFloor(max + 0.5)
+	}
+end
+
+-- Get spurts remaining (2 = full, 1 = one used, 0 = both used)
+local function GetSpurtsRemaining(character)
+	if not character then return 2 end
+	
+	local spurtCount = character:FindFirstChild("SpurtCount")
+	if not spurtCount then return 2 end  -- Not added yet = hasn't used any
+	
+	return spurtCount.Value
+end
+
+-- Check if zone/ultimate has been used
+local function HasUsedZone(character)
+	if not character then return false end
+	return character:FindFirstChild("UsedUlt") ~= nil
+end
+
+-- Get racers in the current race (from Configuration NumberValues)
+local function GetRacers()
+	local racers = {}
+	for _, child in ipairs(Configuration:GetChildren()) do
+		if child:IsA("NumberValue") then
+			-- The NumberValue name is the player name, value is their position
+			TableInsert(racers, child.Name)
+		end
+	end
+	return racers
+end
+
+-- Get LocalPlayer's current race position (from Configuration)
+local function GetRacePosition()
+	local posValue = Configuration:FindFirstChild(LocalPlayer.Name)
+	if posValue and posValue:IsA("NumberValue") then
+		return posValue.Value
+	end
+	return nil
+end
+
 -- Comparison mode: "PB_Global", "PB_Uma", "Median_Global", "Median_Uma", etc.
 local comparisonMode = "PB_Uma"
 
@@ -725,6 +848,23 @@ local function SetupCheckpoints()
 					
 					-- Update lap time display
 					LapTimeValue.Text = StringFormat("%.2fs", cumulativeTime)
+					
+					-- Capture telemetry for LocalPlayer
+					local playerChar = GetCharacter(LocalPlayer)
+					if playerChar then
+						local staminaInfo = GetStaminaInfo(playerChar)
+						local splitTelemetry = {
+							time = cumulativeTime,
+							stamina = staminaInfo and staminaInfo.percent or nil,
+							staminaRaw = staminaInfo and StringFormat("%d/%d", staminaInfo.current, staminaInfo.max) or nil,
+							spurts = GetSpurtsRemaining(playerChar),
+							slips = slipCount,
+							usedZone = HasUsedZone(playerChar),
+							position = GetRacePosition()
+						}
+						
+						TableInsert(localTelemetry, splitTelemetry)
+					end
 				end)
 				
 				TableInsert(checkpointConnections, connection)
@@ -747,8 +887,41 @@ local function OnRaceStart()
 	cumulativeRefTime = 0
 	totalDeltaSum = 0
 	
+	-- Reset telemetry for new race
+	localTelemetry = {}
+	slipCount = 0
+	hadZoneCutscene = false
+	
+	-- Clean up old connections
+	if slipConnection then
+		slipConnection:Disconnect()
+		slipConnection = nil
+	end
+	if zoneCutsceneTracking then
+		zoneCutsceneTracking:Disconnect()
+		zoneCutsceneTracking = nil
+	end
+	
+	-- Set up tracking for LocalPlayer
+	local character = GetCharacter(LocalPlayer)
+	if character then
+		-- 1. Slip tracking (SprintRegenUP)
+		slipConnection = character.ChildAdded:Connect(function(child)
+			if child.Name == "SprintRegenUP" then
+				slipCount = slipCount + 1
+			end
+		end)
+		
+		-- 2. Zone cutscene tracking (if CutsceneOn added while UsedUlt exists)
+		zoneCutsceneTracking = Lighting.ChildAdded:Connect(function(child)
+			if child.Name == "CutsceneOn" and HasUsedZone(character) then
+				hadZoneCutscene = true
+			end
+		end)
+	end
+	
 	-- Update current uma
-	currentUma = DetectUma()
+	currentUma = GetUma(LocalPlayer)
 	
 	-- Re-detect weather in case it changed
 	currentWeather = DetectWeather()
@@ -777,6 +950,9 @@ local function OnRaceStart()
 	if currentMapName and currentWeather then
 		SplitTracker.LoadHistory(currentMapName, currentWeather)
 	end
+	
+	-- Cache version info (do this once)
+	GetReleaseVersion()
 end
 
 local function OnRaceEnd()
@@ -792,10 +968,26 @@ local function OnRaceEnd()
 			uma = currentUma,
 			totalTime = totalTime,
 			splits = currentSplits,
+			-- Extended data
+			placeVersion = placeVersion,
+			releaseVersion = GetReleaseVersion(),
+			racers = GetRacers(),
+			hadZoneCutscene = hadZoneCutscene,
+			telemetry = localTelemetry,
 		}
 		
 		local success = SplitTracker.AppendRecord(currentMapName, currentWeather, record)
 		print("[UmaSplits] Saved record:", success and "OK" or "FAILED", currentMapName, currentWeather, totalTime)
+	end
+	
+	-- Clean up connections
+	if slipConnection then
+		slipConnection:Disconnect()
+		slipConnection = nil
+	end
+	if zoneCutsceneTracking then
+		zoneCutsceneTracking:Disconnect()
+		zoneCutsceneTracking = nil
 	end
 	
 	isRaceActive = false
