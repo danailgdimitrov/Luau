@@ -20,7 +20,7 @@
 -- Load dependencies
 local Services = loadstring(game:HttpGetAsync("https://raw.githubusercontent.com/danailgdimitrov/Luau/refs/heads/main/Miscellaneous/Services.luau"))()
 -- DEBUG: Using debug branch for SplitTracker
-local SplitTracker = loadstring(game:HttpGetAsync("https://raw.githubusercontent.com/danailgdimitrov/Luau/refs/heads/fix/split-tracker-save/Miscellaneous/SplitTracker.luau"))()
+local SplitTracker = loadstring(game:HttpGetAsync("https://raw.githubusercontent.com/danailgdimitrov/Luau/refs/heads/dev/Miscellaneous/SplitTracker.luau"))()
 
 -- Performance: local references
 local Clock = os.clock

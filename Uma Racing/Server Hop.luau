@@ -1,17 +1,20 @@
 repeat task.wait() until game:IsLoaded()
 
+local Services = loadstring(game:HttpGetAsync("https://raw.githubusercontent.com/danailgdimitrov/Luau/refs/heads/main/Miscellaneous/Services.luau"))()
+
 loadstring(game:HttpGetAsync("https://raw.githubusercontent.com/danailgdimitrov/Luau/main/Miscellaneous/Hook%20Console%20Logging.luau"))()
 
 rconsoleprint("Game loaded\n")
 
--- Configuration
-local MVP_VALUE = 380
-local MAX_PING = 150 -- Need to make this check client ping, not server ping
-local MAX_API_PAGES = 3 -- Maximum API pages to fetch
+local config = {
+	MVP_VALUE = 380,
+	MAX_PING = 150,
+	MAX_API_PAGES = 3
+}
 
 local Players = game:GetService("Players")
 local TeleportService = game:GetService("TeleportService")
-local HttpService = game:GetService("HttpService")
+local HttpService = game:GetService("HttpService")	
 local LocalPlayer = Players.LocalPlayer
 
 -- Parse visited servers from teleport data (passed from previous hop)
